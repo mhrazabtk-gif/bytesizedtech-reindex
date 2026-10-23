@@ -1,0 +1,32 @@
+name: Hourly Site Re-indexing
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs at minute 0 of every hour
+  workflow_dispatch:
+
+jobs:
+  reindex-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Generate Sitemap
+        run: node build-sitemap.js
+
+      - name: Deploy to Cloudflare Pages
+        uses: Cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'bytesizedtech'
+          directory: './public'
+
+      - name: Send IndexNow Ping
+        run: node ping-indexnow.js
