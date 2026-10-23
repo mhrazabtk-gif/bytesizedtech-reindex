@@ -1,30 +1,93 @@
+
 name: Hourly Site Re-indexing
 
 on:
   schedule:
-    - cron: '0 * * * *' # Runs at minute 0 of every hour
+    - cron: '0 * * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bytesizedtech-production-deploy
+  cancel-in-progress: false
 
 jobs:
   reindex-and-deploy:
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate and Prepare Deployment Files
+        shell: bash
         run: |
-          git init
-          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git fetch origin
-          git checkout main || git checkout master
+          set -euo pipefail
+
+          mkdir -p public
+
+          # Never deploy without the original redirect rules.
+          if [ ! -f public/_redirects ]; then
+            echo "::error::public/_redirects is missing."
+            echo "Commit your original redirect file to GitHub first."
+            exit 1
+          fi
+
+          # Check that the file contains active rules.
+          RULE_COUNT=$(grep -cvE '^[[:space:]]*(#.*)?$' public/_redirects || true)
+
+          if [ "$RULE_COUNT" -eq 0 ]; then
+            echo "::error::No active redirect rules found."
+            exit 1
+          fi
+
+          if [ "$RULE_COUNT" -gt 2100 ]; then
+            echo "::error::Redirect count exceeds 2100."
+            exit 1
+          fi
+
+          echo "Redirect rules found: $RULE_COUNT"
+
+          # Ensure the IndexNow verification key is deployed.
+          KEY_FILE="4060977e51ce4c1fa379061ad0ee9e12.txt"
+
+          if [ -f "$KEY_FILE" ]; then
+            cp "$KEY_FILE" "public/$KEY_FILE"
+          elif [ ! -f "public/$KEY_FILE" ]; then
+            echo "::error::IndexNow key file is missing."
+            exit 1
+          fi
 
       - name: Generate Sitemap
         run: node build-sitemap.js
+
+      - name: Verify Deployment Files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -s public/sitemap.xml
+          test -s public/_redirects
+          test -s public/4060977e51ce4c1fa379061ad0ee9e12.txt
+
+          echo "Sitemap, redirects, and IndexNow key are ready."
 
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler pages deploy public --project-name=bytesizedtech --commit-dirty=true
+          npx --yes wrangler@4 pages deploy public \
+            --project-name=bytesizedtech \
+            --commit-dirty=true
 
       - name: Send IndexNow Ping
         run: node ping-indexnow.js
