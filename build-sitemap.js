@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DOMAIN = 'https://bytesizedtech.pages.dev';
+const DOMAIN = 'https://bytesizedtech.pageaura.xyz';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SITEMAP_PATH = path.join(PUBLIC_DIR, 'sitemap.xml');
 
