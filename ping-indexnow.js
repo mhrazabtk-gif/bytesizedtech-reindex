@@ -1,6 +1,6 @@
 const https = require('https');
 
-const host = 'bytesizedtech.pages.dev';
+const host = 'async-agency.pageaura.xyz';
 const apiKey = '4060977e51ce4c1fa379061ad0ee9e12';
 
 const routes = [
